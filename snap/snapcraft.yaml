@@ -1,0 +1,112 @@
+name: capa
+base: core26
+version: '10.0.0'
+title: capa
+icon: snap/gui/capa.png
+summary: Identify capabilities in executable files
+description: |
+  capa is the FLARE team's tool to identify capabilities in executable
+  files. Run it against a PE, ELF or .NET module, or raw shellcode, and it
+  tells you what the program can do: for example, that it acts as a
+  backdoor, installs a service or communicates over HTTP. Results are
+  mapped to MITRE ATT&CK and the Malware Behavior Catalog. The standard
+  rule set and FLIRT library signatures are included.
+
+  **Examples**
+
+     capa suspicious.exe
+     capa -vv suspicious.exe
+     capa --json suspicious.exe > report.json
+     capa -f sc64 shellcode.bin
+     capa -r ~/capa-rules suspicious.exe
+     capa.show-features suspicious.exe
+
+  **Backends**
+
+  The vivisect and .NET backends, BinExport2 files, capa freeze files
+  and CAPE, DRAKVUF and VMRay sandbox reports are supported. The IDA,
+  Binary Ninja and Ghidra backends need those programs installed on the
+  host and are unavailable.
+
+  **File access**
+
+  capa can analyze files in your home directory. To analyze files on USB
+  drives and other removable media (/media, /mnt), run:
+
+     sudo snap connect capa:removable-media
+license: Apache-2.0
+grade: stable
+confinement: strict
+website: https://mandiant.github.io/capa/
+source-code:
+  - https://github.com/mandiant/capa
+  - https://github.com/sidalit/capa-snap
+issues:
+  - https://github.com/mandiant/capa/issues
+  - https://github.com/sidalit/capa-snap/issues
+contact: https://github.com/sidalit/capa-snap/issues
+
+platforms:
+  amd64:
+  arm64:
+
+apps:
+  capa:
+    command: bin/capa
+    environment: &environment
+      # snapd puts $SNAP/usr/bin first, which would run the system Python
+      # instead of the virtual environment's.
+      PATH: $SNAP/bin:$SNAP/usr/bin:$PATH
+      # Keep the rule cache outside revisioned data.
+      XDG_CACHE_HOME: $SNAP_USER_COMMON/.cache
+    plugs: &plugs
+      - home
+      - removable-media
+  show-features:
+    command: bin/capa-show-features
+    environment: *environment
+    plugs: *plugs
+  capafmt:
+    command: bin/capafmt
+    environment: *environment
+    plugs: *plugs
+  capa2yara:
+    command: bin/capa2yara
+    environment: *environment
+    plugs: *plugs
+
+parts:
+  capa:
+    plugin: python
+    source: https://github.com/mandiant/capa.git
+    source-tag: v$SNAPCRAFT_PROJECT_VERSION
+    # Fetch the bundled rules but not the large test sample collection.
+    source-submodules:
+      - rules
+    python-packages:
+      - .
+    # Use the dependency versions upstream ships in its standalone binaries.
+    python-constraints:
+      - requirements.txt
+    build-packages:
+      - build-essential
+      - python3-dev
+    stage-packages:
+      - python3-venv
+    override-build: |
+      craftctl default
+      # capa looks for its default rules and signatures next to the
+      # installed capa package.
+      site_packages="$(echo "$CRAFT_PART_INSTALL"/lib/python3*/site-packages)"
+      mkdir -p "$site_packages/rules"
+      cp -r rules/*/ "$site_packages/rules/"
+      cp -r sigs "$site_packages/sigs"
+      for script in show-features capafmt capa2yara; do
+        target="$script"
+        [ "$script" = show-features ] && target=capa-show-features
+        { echo '#!/usr/bin/env python3'; sed '1{/^#!/d}' "scripts/$script.py"; } \
+          > "$CRAFT_PART_INSTALL/bin/$target"
+        chmod 755 "$CRAFT_PART_INSTALL/bin/$target"
+      done
+      install -Dm644 LICENSE.txt "$CRAFT_PART_INSTALL/share/doc/capa/LICENSE.txt"
+      install -Dm644 rules/LICENSE.txt "$CRAFT_PART_INSTALL/share/doc/capa/rules/LICENSE.txt"
