@@ -54,10 +54,8 @@ apps:
   capa:
     command: bin/capa
     environment: &environment
-      # snapd puts $SNAP/usr/bin first, which would run the system Python
-      # instead of the virtual environment's.
+      # Prefer the virtual environment's Python.
       PATH: $SNAP/bin:$SNAP/usr/bin:$PATH
-      # Keep the rule cache outside revisioned data.
       XDG_CACHE_HOME: $SNAP_USER_COMMON/.cache
     plugs: &plugs
       - home
@@ -80,12 +78,10 @@ parts:
     plugin: python
     source: https://github.com/mandiant/capa.git
     source-tag: v$SNAPCRAFT_PROJECT_VERSION
-    # Fetch the bundled rules but not the large test sample collection.
+    # Exclude the large test sample submodule.
     source-submodules:
       - rules
-    python-packages:
-      - .
-    # Use the dependency versions upstream ships in its standalone binaries.
+    # Match upstream's standalone dependency versions.
     python-constraints:
       - requirements.txt
     build-packages:
@@ -95,8 +91,7 @@ parts:
       - python3-venv
     override-build: |
       craftctl default
-      # capa looks for its default rules and signatures next to the
-      # installed capa package.
+      # capa locates bundled rules and signatures beside its Python package.
       site_packages="$(echo "$CRAFT_PART_INSTALL"/lib/python3*/site-packages)"
       mkdir -p "$site_packages/rules"
       cp -r rules/*/ "$site_packages/rules/"
